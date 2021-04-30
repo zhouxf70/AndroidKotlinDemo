@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_name">AndroidKotlinDemo</string>
+    <string name="title_activity_login">LoginActivity</string>
+    <string name="prompt_email">Email</string>
+    <string name="prompt_password">Password</string>
+    <string name="action_sign_in">Sign in</string>
+    <string name="action_sign_in_short">Sign in</string>
+    <string name="welcome">"Welcome !"</string>
+    <string name="invalid_username">Not a valid username</string>
+    <string name="invalid_password">Password must be >5 characters</string>
+    <string name="login_failed">"Login failed"</string>
+    <string name="query_user_info">查询用户信息</string>
+    <string name="coroutine">协程</string>
+    <string name="bind_remote_service">绑定远程服务</string>
+    <string name="tab4">tab4</string>
+    <string name="tab3">tab3</string>
+    <string name="tab2">tab2</string>
+    <string name="tab1">tab1</string>
+    <string name="photo">拍照</string>
+    <string name="gif">GIF</string>
+    <string name="push">推流</string>
+</resources>
