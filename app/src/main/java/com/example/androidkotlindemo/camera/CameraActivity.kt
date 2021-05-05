@@ -7,6 +7,8 @@ import android.graphics.ImageFormat
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.*
 import android.media.ImageReader
+import android.media.MediaCodec
+import android.media.MediaRecorder
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -16,13 +18,19 @@ import android.view.TextureView
 import android.view.View
 import android.view.Window
 import android.widget.Button
+import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import com.example.androidkotlindemo.R
+import com.example.androidkotlindemo.camera.flv.FlvPackage
 import com.example.androidkotlindemo.common.KLog
-import kotlinx.coroutines.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import java.io.File
+import java.nio.ByteBuffer
 
 @RequiresApi(Build.VERSION_CODES.N)
 class CameraActivity : AppCompatActivity(), View.OnClickListener {
@@ -33,9 +41,20 @@ class CameraActivity : AppCompatActivity(), View.OnClickListener {
     private lateinit var mTextureView: TextureView
     private var mImageReader: ImageReader? = null
     private var mCameraDevice: CameraDevice? = null
-    private var mSensorOrientation = 0
     private var mCameraSession: CameraCaptureSession? = null
-    private var mPreviewRequest: CaptureRequest? = null
+    private var mMediaEncoder: MediaCodecWrap? = null
+    private var mMediaDecoder: MediaCodecWrap? = null
+    private var mFlvPackage: FlvPackage? = null
+    private lateinit var mPreviewRequestBuilder: CaptureRequest.Builder
+    private val mCaptureCallback = object : CameraCaptureSession.CaptureCallback() {
+        override fun onCaptureStarted(session: CameraCaptureSession, request: CaptureRequest, timestamp: Long, frameNumber: Long) = Unit
+        override fun onCaptureProgressed(session: CameraCaptureSession, request: CaptureRequest, partialResult: CaptureResult) = Unit
+        override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
+            super.onCaptureCompleted(session, request, result)
+//            KLog.t("onCaptureCompleted $request")
+//            nextGifCapture()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,23 +71,21 @@ class CameraActivity : AppCompatActivity(), View.OnClickListener {
     override fun onResume() {
         super.onResume()
         startBackgroundThread()
-        if (mTextureView.isAvailable) {
-            initCamera()
-        } else {
+        if (mTextureView.isAvailable) initCamera()
+        else
             mTextureView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-                override fun onSurfaceTextureAvailable(texture: SurfaceTexture, width: Int, height: Int) {
-                    KLog.d("$width x $height")
-                    initCamera()
-                }
-
                 override fun onSurfaceTextureSizeChanged(texture: SurfaceTexture, width: Int, height: Int) = Unit
                 override fun onSurfaceTextureDestroyed(texture: SurfaceTexture) = true
                 override fun onSurfaceTextureUpdated(texture: SurfaceTexture) = Unit
+                override fun onSurfaceTextureAvailable(texture: SurfaceTexture, width: Int, height: Int) = initCamera()
             }
-        }
     }
 
     override fun onPause() {
+        KLog.d("onPause")
+        imgJob?.run {
+            if (isActive) cancel()
+        }
         releaseCamera()
         stopBackgroundThread()
         super.onPause()
@@ -78,7 +95,6 @@ class CameraActivity : AppCompatActivity(), View.OnClickListener {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) return
         val cameraManager: CameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
         val cameraId = "" + CameraCharacteristics.LENS_FACING_FRONT
-        mSensorOrientation = cameraManager.getCameraCharacteristics(cameraId).get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
         cameraManager.openCamera(cameraId, object : CameraDevice.StateCallback() {
             override fun onOpened(camera: CameraDevice) {
                 KLog.t(camera)
@@ -98,20 +114,40 @@ class CameraActivity : AppCompatActivity(), View.OnClickListener {
         val surface = Surface(texture)
 
         // photo surface
-        mImageReader = ImageReader.newInstance(1920, 1080, ImageFormat.JPEG, 2)
+        mImageReader = ImageReader.newInstance(1920, 1080, ImageFormat.YUV_420_888, 2)
         mImageReader!!.setOnImageAvailableListener({ processImage(it) }, mBackgroundHandler)
 
+        // h.265 encode surface
+        mMediaEncoder = MediaCodecWrap(MediaCodecWrap.AVC, true)
+        val encoderSurface = mMediaEncoder!!.getEncoderSurface(1920, 1080)
+        val file = File(application.getExternalFilesDir(null), "my_flv.flv")
+        mFlvPackage = FlvPackage().also { it.start(file) }
+        mMediaEncoder!!.start(object : MediaCodecWrap.OnOutputBufferAvailableListener {
+            override fun outputBufferAvailable(output: ByteBuffer, bufferInfo: MediaCodec.BufferInfo) {
+                KLog.d("onEncodedDataAvailable ${output.remaining()}")
+                mFlvPackage?.writeVideoFrame(output, bufferInfo)
+            }
+        })
+//        MediaRecorder
+
         mCameraDevice?.apply {
-            createCaptureSession(arrayListOf(surface, mImageReader!!.surface), object : CameraCaptureSession.StateCallback() {
-                override fun onConfigureFailed(session: CameraCaptureSession) = KLog.t("onConfigureFailed")
+            createCaptureSession(arrayListOf(surface, mImageReader!!.surface, encoderSurface), object : CameraCaptureSession.StateCallback() {
+                override fun onConfigureFailed(session: CameraCaptureSession) = Unit
+                override fun onActive(session: CameraCaptureSession) = KLog.d("onActive")
+                override fun onClosed(session: CameraCaptureSession) = KLog.d("onClosed")
+                override fun onReady(session: CameraCaptureSession) = KLog.d("onReady")
+                override fun onSurfacePrepared(session: CameraCaptureSession, surface: Surface) = KLog.d("onSurfacePrepared")
+                override fun onCaptureQueueEmpty(session: CameraCaptureSession) = KLog.d("onCaptureQueueEmpty")
                 override fun onConfigured(session: CameraCaptureSession) {
                     mCameraSession = session
-                    mPreviewRequest = createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).run {
-                        addTarget(surface)
+                    mPreviewRequestBuilder = createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
                         set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
-                        build()
+                        addTarget(surface)
+                        addTarget(mImageReader!!.surface)
+                        addTarget(encoderSurface)
                     }
-                    takePreview()
+                    state = CaptureState.PREVIEW
+                    mCameraSession?.setRepeatingRequest(mPreviewRequestBuilder.build(), mCaptureCallback, mBackgroundHandler)
                 }
             }, mBackgroundHandler)
         }
@@ -119,75 +155,67 @@ class CameraActivity : AppCompatActivity(), View.OnClickListener {
 
     override fun onClick(v: View?) {
         when (v?.id) {
-            R.id.bt_photo -> takePhoto()
-            R.id.bt_gif -> takeGif()
+            R.id.bt_photo -> state = CaptureState.PHOTO
+            R.id.bt_gif -> state = CaptureState.GIF
             R.id.bt_push -> Unit
         }
     }
 
-    private fun takePreview() {
-        state = CaptureState.PREVIEW
-        mCameraDevice?.apply {
-            mCameraSession?.setRepeatingRequest(mPreviewRequest!!, null, mBackgroundHandler)
-        }
-    }
-
-    private fun takePhoto() {
-        state = CaptureState.PHOTO
-        mCameraDevice?.apply {
-            val captureRequest = createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).run {
-                addTarget(mImageReader!!.surface)
-                set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
-                set(CaptureRequest.JPEG_ORIENTATION, mSensorOrientation % 360)
-                build()
-            }
-            mCameraSession?.capture(captureRequest, null, mBackgroundHandler)
-        }
-    }
-
-    private var gifJob: Job? = null
-    private fun takeGif() {
-        KLog.d("takeGif")
-        state = CaptureState.GIF
-        mCameraDevice?.apply {
-            val captureRequest = createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).run {
-                addTarget(mImageReader!!.surface)
-                set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
-                build()
-            }
-            gifJob = GlobalScope.launch {
-                mCameraSession?.stopRepeating()
-                mCameraSession?.abortCaptures()
-                repeat(GIF_PICTURE_SIZE) {
-                    delay(100)
-                    mCameraSession?.capture(captureRequest, null, mBackgroundHandler)
-                }
-            }
-        }
-    }
-
+    private var imgJob: Job? = null
+    private var lastCaptureTime = 0L
     private val gif = ArrayList<ByteArray>(GIF_PICTURE_SIZE)
     private fun processImage(reader: ImageReader) {
-        KLog.t("processImage,state = $state")
+//        KLog.d("processImage")
+        val image = reader.acquireLatestImage()
         when (state) {
             CaptureState.PREVIEW -> Unit
             CaptureState.PHOTO -> {
-                val file = File(application.getExternalFilesDir(null), "pic.jpg").also { KLog.d(it.absolutePath) }
-                mBackgroundHandler?.post { ImageUtils.toPicture(reader.acquireNextImage(), file) }
                 state = CaptureState.PREVIEW
+                val nv21 = ImageUtils.getDataFromYUV(image)
+                imgJob = GlobalScope.launch(Dispatchers.IO) {
+                    val file = File(application.getExternalFilesDir(null), "pic.jpg").also { KLog.d(it.absolutePath) }
+                    ImageUtils.toPicture(nv21, file)
+                    runOnUiThread {
+                        Toast.makeText(this@CameraActivity, "save picture:${file.absolutePath}", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
             CaptureState.GIF -> {
-                gif.add(ImageUtils.toByteArr(reader.acquireNextImage()))
+                if (System.currentTimeMillis() - lastCaptureTime > 100) {
+                    lastCaptureTime = System.currentTimeMillis()
+                    gif.add(ImageUtils.getDataFromYUV(image))
+                }
+                image.close()
                 if (gif.size == GIF_PICTURE_SIZE) {
-                    val file = File(application.getExternalFilesDir(null), "my_gif.gif").also { KLog.d(it.absolutePath) }
-                    gifJob = GlobalScope.launch(Dispatchers.IO) {
+                    state = CaptureState.PREVIEW
+                    imgJob = GlobalScope.launch(Dispatchers.IO) {
+                        val file = File(application.getExternalFilesDir(null), "my_gif.gif").also { KLog.d(it.absolutePath) }
                         ImageUtils.toGif(gif, file)
                         gif.clear()
-                        takePreview()
+                        runOnUiThread {
+                            Toast.makeText(this@CameraActivity, "save gif:${file.absolutePath}", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
             }
         }
+        image.close()
+    }
+
+    private fun getInputEncodedDataHandler(surface: Surface? = null): MediaCodecWrap.InputDataHandler {
+        mMediaDecoder = MediaCodecWrap(MediaCodecWrap.AVC, false)
+        val inputHandler = mMediaDecoder!!.setDecoderSurface(1920, 1080, surface)
+        mMediaDecoder!!.start(object : MediaCodecWrap.OnOutputBufferAvailableListener {
+            override fun outputBufferAvailable(output: ByteBuffer, bufferInfo: MediaCodec.BufferInfo) {
+                val size = output.remaining()
+                KLog.d("onDecodedDataAvailable $size")
+                val file = File(application.getExternalFilesDir(null), "pic_${System.currentTimeMillis()}.jpg").also { KLog.d(it.absolutePath) }
+                val byteArray = ByteArray(size)
+                output.get(byteArray)
+                ImageUtils.toPicture(byteArray, file)
+            }
+        })
+        return inputHandler
     }
 
     private fun startBackgroundThread() {
@@ -200,7 +228,7 @@ class CameraActivity : AppCompatActivity(), View.OnClickListener {
 
     private fun stopBackgroundThread() {
         mBackgroundThread?.run {
-            quitSafely()
+            quit()
             try {
                 mBackgroundThread?.join()
                 mBackgroundThread = null
@@ -211,9 +239,14 @@ class CameraActivity : AppCompatActivity(), View.OnClickListener {
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        KLog.d("onDestroy")
+    }
+
     private fun requestPermission() {
         val permissions = arrayOf(
-            Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO
+                Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO
         )
         val list = ArrayList<String>()
         for (i in permissions.indices) {
@@ -240,14 +273,19 @@ class CameraActivity : AppCompatActivity(), View.OnClickListener {
         mCameraSession = null
         mImageReader?.close()
         mImageReader = null
-
-        gifJob?.run {
+        mMediaEncoder?.stop()
+        mMediaEncoder = null
+        mMediaDecoder?.stop()
+        mMediaDecoder = null
+        mFlvPackage?.stop()
+        mFlvPackage = null
+        imgJob?.run {
             if (isActive) cancel()
         }
     }
 
     companion object {
-        const val GIF_PICTURE_SIZE = 30
+        const val GIF_PICTURE_SIZE = 10
     }
 
 }

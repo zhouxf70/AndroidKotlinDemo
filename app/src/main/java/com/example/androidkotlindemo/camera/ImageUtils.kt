@@ -1,8 +1,6 @@
 package com.example.androidkotlindemo.camera
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Matrix
+import android.graphics.*
 import android.media.Image
 import android.os.Build
 import androidx.annotation.RequiresApi
@@ -16,39 +14,68 @@ import kotlin.system.measureTimeMillis
 @RequiresApi(Build.VERSION_CODES.N)
 object ImageUtils {
 
-    fun toByteArr(image: Image): ByteArray {
+    const val NV21 = 0
+    const val JPEG = 1
+
+    fun getDataFromYUV(image: Image): ByteArray {
+        val start = System.currentTimeMillis()
+        val yBuffer = image.planes[0].buffer
+        val uvBuffer = image.planes[1].buffer
+        val vuBuffer = image.planes[2].buffer
+
+        val ySize = yBuffer.remaining()
+        val uvSize = uvBuffer.remaining()
+        val vuSize = vuBuffer.remaining()
+        log("y : $ySize, uv : $uvSize, vu : $vuSize")
+
+        val byteArray = ByteArray(ySize + uvSize + 1).apply {
+//            set(lastIndex, uvBuffer.get(uvSize - 1))
+        }
+        yBuffer.get(byteArray, 0, ySize)
+        vuBuffer.get(byteArray, ySize, vuSize)
+        log("time : ${System.currentTimeMillis() - start}")
+        return byteArray
+    }
+
+    fun getDataFromJEPG(image: Image): ByteArray {
+        log("getDataFromJEPG")
         val buffer = image.planes[0].buffer
-        val byteArr = ByteArray(buffer.remaining()).also { KLog.d(it.size) }
+        val byteArr = ByteArray(buffer.remaining())
         buffer.get(byteArr)
         image.close()
         return byteArr
     }
 
-    fun toPicture(image: Image, file: File) {
+    fun toPicture(data: ByteArray, file: File, format: Int = NV21) {
         var output: FileOutputStream? = null
         try {
             output = FileOutputStream(file).apply {
-                write(toByteArr(image))
+                if (format == NV21)
+                    write(NV21toJPEG(data, 100))
+                else
+                    write(data)
             }
         } catch (e: IOException) {
-            KLog.e(e.toString())
+            log(e.toString())
         } finally {
             close(output)
         }
     }
 
-    fun toGif(images: ArrayList<ByteArray>, file: File) {
+    fun toGif(images: List<ByteArray>, file: File, format: Int = NV21) {
+        var data: List<ByteArray> = images
+        if (format == NV21)
+            data = images.map { NV21toJPEG(it, 100) }
+//        saveGifPicture(data, file)
         val bitmaps = ArrayList<Bitmap>(images.size)
         val options = BitmapFactory.Options().apply {
             inPreferredConfig = Bitmap.Config.RGB_565
             inSampleSize = 2
         }
         val matrix = Matrix().apply { setRotate(90f) }
-        images.forEach { byteArr ->
+        data.forEach { byteArr ->
             BitmapFactory.decodeByteArray(byteArr, 0, byteArr.size, options).run {
-//                KLog.t("$width x $height")
                 Bitmap.createBitmap(this, 0, 0, width, height, matrix, true).also {
-//                    KLog.t("${it.width} x ${it.height}")
                     bitmaps.add(it)
                 }
                 recycle()
@@ -60,20 +87,20 @@ object ImageUtils {
             output.write(generateGIF(bitmaps))
             output.close()
         } catch (e: Exception) {
-            KLog.e(e)
+            log(e)
         } finally {
             close(output)
         }
     }
 
-    private fun generateGIF(bitmaps: ArrayList<Bitmap>): ByteArray? {
+    private fun generateGIF(bitmaps: List<Bitmap>): ByteArray? {
         val bos = ByteArrayOutputStream()
         val encoder = AnimatedGifEncoder()
         encoder.setDelay(100)
         encoder.start(bos)
         for (bitmap in bitmaps) {
             measureTimeMillis { encoder.addFrame(bitmap) }.also {
-                KLog.d("time:$it")
+                log("time:$it")
                 bitmap.recycle()
             }
         }
@@ -81,14 +108,36 @@ object ImageUtils {
         return bos.toByteArray()
     }
 
+    private fun saveGifPicture(images: List<ByteArray>, gifFile: File) {
+        val path = gifFile.absolutePath.let {
+            it.substring(0, it.lastIndexOf("/"))
+        }.also { log(it) }
+        for (i in images.indices) {
+            val file = File(path, "my_gif_pic_$i.jpg").also {
+                if (!it.exists()) it.createNewFile().also { log("create") }
+            }
+            toPicture(images[i], file, JPEG)
+        }
+    }
+
     private fun close(closeable: Closeable?) {
         closeable?.let {
             try {
                 it.close()
             } catch (e: IOException) {
-                KLog.e(e.toString())
+                log(e.toString())
             }
         }
     }
 
+    private fun NV21toJPEG(nv21: ByteArray?, quality: Int): ByteArray {
+        val out = ByteArrayOutputStream()
+        val yuv = YuvImage(nv21, ImageFormat.NV21, 1920, 1080, null)
+        yuv.compressToJpeg(Rect(0, 0, 1920, 1080), quality, out)
+        return out.toByteArray()
+    }
+
+    private fun log(any: Any?) {
+        KLog.d("ImageUtils", any.toString())
+    }
 }
