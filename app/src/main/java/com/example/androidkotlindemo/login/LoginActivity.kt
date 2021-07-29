@@ -5,14 +5,24 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.view.MotionEvent
+import android.webkit.WebView
 import android.widget.Button
 import android.widget.EditText
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import com.example.androidkotlindemo.R
-import com.example.androidkotlindemo.camera.CameraActivity
+import com.example.androidkotlindemo.animator.AnimatorActivity
+import com.example.androidkotlindemo.common.JsonParser
 import com.example.androidkotlindemo.common.KLog
+import com.example.androidkotlindemo.database.RoomActivity
 import com.example.androidkotlindemo.mvp.MVPBaseActivity
+import com.example.androidkotlindemo.network.bean.Person
+import com.example.androidkotlindemo.viewpage.ViewPagerActivity
 import com.practice.aidl.server.IMyAidlInterface
 
 /**
@@ -31,6 +41,7 @@ class LoginActivity : LoginContract.View,
             presenter?.login(etUsername?.text.toString(), etPwd?.text.toString())
         }
 
+
         findViewById<Button>(R.id.bt_bind_service).setOnClickListener {
             val intent = Intent("com.practice.aidl.server.IMyAidlInterface")
             intent.setPackage("com.practice.aidl")
@@ -39,13 +50,40 @@ class LoginActivity : LoginContract.View,
 
         KLog.d("is main thread :${Looper.myLooper() == Looper.getMainLooper()}")
 
+        lifecycle.addObserver(object : LifecycleEventObserver {
+            override fun onStateChanged(source: LifecycleOwner, event: Lifecycle.Event) {
+                KLog.d("Login : $event")
+            }
+        })
+
+//        WebView(this).addJavascriptInterface()
     }
+
+    private fun testParser() {
+        val src = "{\"name\":\"10\",\"like\":\"dance\"}"
+        KLog.d(src.length)
+        val per = JsonParser.parseObject(src, Person::class.java)
+        KLog.d(per)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        KLog.d("onSaveInstanceState")
+    }
+
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+        KLog.d("onRestoreInstanceState")
+    }
+
 
     override fun loginResult(loginResult: LoginResult) {
         KLog.d(loginResult)
 //        val intent = Intent(this, MainActivity::class.java)
-//        val intent = Intent(this, ViewPagerActivity::class.java)
-        val intent = Intent(this, CameraActivity::class.java)
+        val intent = Intent(this, ViewPagerActivity::class.java)
+//        val intent = Intent(this, CameraActivity::class.java)
+//        val intent = Intent(this, RoomActivity::class.java)
+//        val intent = Intent(this, AnimatorActivity::class.java)
         startActivity(intent)
     }
 

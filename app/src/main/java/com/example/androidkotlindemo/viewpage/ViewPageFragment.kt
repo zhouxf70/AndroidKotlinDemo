@@ -67,11 +67,11 @@ class ViewPageFragment : Fragment() {
             activity!!,
             ViewModelFactory.INSTANCE
         ).get(FragmentViewModel::class.java)
-        viewModel.liveData.observe(viewLifecycleOwner, Observer {
-            KLog.d("$mName $it")
-            if (it.what == "ViewPageFragment_$mName")
-                KLog.d(it.obj)
-        })
+//        viewModel.liveData.observe(viewLifecycleOwner, {
+//            KLog.d("$mName $it")
+//            if (it.what == "ViewPageFragment_$mName")
+//                KLog.d(it.obj)
+//        })
     }
 
     private fun initView() {
@@ -98,7 +98,7 @@ class ViewPageFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         KLog.d(mName)
-        viewModel.liveData.value = Event(ViewPagerActivity.WHAT, "$mName resume")
+//        viewModel.liveData.value = Event(ViewPagerActivity.WHAT, "$mName resume")
     }
 
     override fun onPause() {

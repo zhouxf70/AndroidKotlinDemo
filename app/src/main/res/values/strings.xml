@@ -19,4 +19,5 @@
     <string name="photo">拍照</string>
     <string name="gif">GIF</string>
     <string name="push">推流</string>
+    <string name="android">Android</string>
 </resources>

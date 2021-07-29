@@ -1,7 +1,7 @@
 apply plugin: 'com.android.application'
 
 apply plugin: 'kotlin-android'
-
+apply plugin: 'kotlin-kapt'
 apply plugin: 'kotlin-android-extensions'
 
 android {
@@ -9,7 +9,7 @@ android {
     buildToolsVersion "29.0.2"
     defaultConfig {
         applicationId "com.example.androidkotlindemo"
-        minSdkVersion 15
+        minSdkVersion 16
         targetSdkVersion 29
         versionCode 1
         versionName "1.0"
@@ -55,4 +55,12 @@ dependencies {
     implementation 'com.android.support:multidex:2.0.1'
 
     implementation 'androidx.recyclerview:recyclerview:1.1.0'
+
+    //room
+    implementation "androidx.room:room-runtime:2.3.0"
+    kapt "androidx.room:room-compiler:2.3.0"
+    implementation "androidx.room:room-ktx:2.3.0"
+
+    //paging
+    implementation 'androidx.paging:paging-runtime:3.0.0-beta01'
 }

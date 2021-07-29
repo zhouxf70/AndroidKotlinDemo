@@ -20,6 +20,11 @@
             android:supportsRtl="true"
             android:theme="@style/AppTheme"
             tools:targetApi="n">
+        <activity
+                android:name=".animator.AnimatorActivity"
+                android:hardwareAccelerated="false" />
+        <activity android:name=".paging.PagingActivity" />
+        <activity android:name=".database.RoomActivity" />
         <activity android:name=".login.LoginActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

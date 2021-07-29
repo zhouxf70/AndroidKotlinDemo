@@ -1,5 +1,6 @@
 package com.example.androidkotlindemo.network
 
+import com.example.androidkotlindemo.network.bean.RepoResponse
 import com.example.androidkotlindemo.network.bean.UserInfo
 import io.reactivex.Observable
 import retrofit2.Call
@@ -16,4 +17,13 @@ interface ApiService {
     @HEAD
     @GET("/users/{userId}")
     fun queryUserInfo2(@Path("userId") userId: String): Observable<UserInfo>
+
+    @GET("/search/repositories?sort=stars")
+    suspend fun searchRepos(
+        @Query("q") key: String,
+        @Query("page") page: Int,
+        @Query("per_page") perPage: Int
+    ): RepoResponse
+
+
 }

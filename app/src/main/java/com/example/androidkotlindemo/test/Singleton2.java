@@ -1,8 +1,5 @@
 package com.example.androidkotlindemo.test;
 
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
-
 /**
  * Created by zxf on 2021/4/14
  */
@@ -23,17 +20,48 @@ class Singleton2 {
 
 
     public static void main(String[] args) {
-        for (int i = 0; i < 1000; i++) {
-            test();
-            System.out.print(".");
+//        for (int i = 0; i < 1000; i++) {
+//            test();
+//            System.out.print(".");
+//            try {
+//                Thread.sleep(100);
+//                singleton2 = null;
+//            } catch (InterruptedException e) {
+//                e.printStackTrace();
+//            }
+//        }
+
+        for (int i = 0; i < 5000; i++) {
+            int finalI = i;
+            new Thread(() -> {
+                try {
+                    Thread.sleep(10);
+                    test2(finalI);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }).start();
+        }
+
+        new Thread(() -> {
             try {
-                Thread.sleep(100);
-                singleton2 = null;
+                Thread.sleep(1000);
+                System.out.println(count);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-        }
+        }).start();
 
+    }
+
+    private static int count = 0;
+    private final static Object o = new Object();
+
+    private static void test2(Integer lock) {
+        if (lock == null) return;
+        synchronized (o) {
+            count++;
+        }
     }
 
     public static void test() {
@@ -42,7 +70,7 @@ class Singleton2 {
                 Singleton2 s = getInstance();
                 if (s == null) {
                     System.out.println("----------------");
-                }else {
+                } else {
                     System.out.print("|");
                 }
             }).start();

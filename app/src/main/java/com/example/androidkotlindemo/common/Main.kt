@@ -1,14 +1,38 @@
 package com.example.androidkotlindemo.common
 
+import android.os.Build
+import androidx.annotation.RequiresApi
+import com.example.androidkotlindemo.network.bean.Person
 import com.example.androidkotlindemo.test.rx.plThread
-import java.lang.RuntimeException
 
 
 /**
  * Created by zxf on 2021/3/15
  */
+@RequiresApi(Build.VERSION_CODES.KITKAT)
 fun main() {
-    println(exceptionReturn())
+}
+
+fun testParser() {
+    val src = "{\"name\":\"10\",\"like\":\"dance\"}"
+    println(src.length)
+    val per = JsonParser.parseObject(src, Person::class.java)
+    print(per)
+}
+
+fun exceptionReturn2(): ReturnTest {
+
+    val i = ReturnTest(0)
+    try {
+        throw RuntimeException("hah")
+    } catch (e: Exception) {
+        println("catch")
+        i.int = 1
+        return i
+    } finally {
+        i.int = 2
+//        return returnT(i)
+    }
 }
 
 fun exceptionReturn(): Int {
@@ -22,9 +46,16 @@ fun exceptionReturn(): Int {
         return i
     } finally {
         i = 2
-        return i
+        println(i)
+//        return returnT(i)
     }
+}
 
+data class ReturnTest(var int: Int)
+
+private fun returnT(int: Int): ReturnTest {
+    println("returnT:$int")
+    return ReturnTest(int)
 }
 
 fun stringList() {

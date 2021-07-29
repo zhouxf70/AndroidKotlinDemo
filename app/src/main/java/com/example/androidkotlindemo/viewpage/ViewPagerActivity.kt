@@ -33,12 +33,12 @@ class ViewPagerActivity : AppCompatActivity() {
 
     private fun initViewModel() {
         viewModel = ViewModelProvider(this, ViewModelFactory.INSTANCE).get(FragmentViewModel::class.java)
-        viewModel.liveData.observe(this, Observer {
-            KLog.d(it)
-            if (it.what == WHAT) {
-                KLog.d(it.obj)
-            }
-        })
+//        viewModel.liveData.observe(this, Observer {
+//            KLog.d(it)
+//            if (it.what == WHAT) {
+//                KLog.d(it.obj)
+//            }
+//        })
     }
 
     private fun initView() {

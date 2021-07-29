@@ -10,7 +10,8 @@ import androidx.fragment.app.FragmentPagerAdapter
 class FragmentAdapter(fm: FragmentManager, private val fragments: List<ViewPageFragment>) :
     FragmentPagerAdapter(
         fm,
-        BEHAVIOR_RESUME_ONLY_CURRENT_FRAGMENT
+//        BEHAVIOR_RESUME_ONLY_CURRENT_FRAGMENT
+        BEHAVIOR_SET_USER_VISIBLE_HINT
     ) {
     override fun getItem(position: Int): Fragment {
         return fragments[position]
