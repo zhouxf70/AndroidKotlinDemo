@@ -18,4 +18,8 @@ object Repository {
     fun queryUserInfo(liveData: MutableLiveData<String>, userId: String) {
 
     }
+
+    fun testGitBranch(){
+
+    }
 }
